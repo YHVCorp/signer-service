@@ -104,7 +104,7 @@ func (fm *FileManager) authMiddleware() gin.HandlerFunc {
 
 func (fm *FileManager) uploadFile(signerServer *SignerServer) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		file, _, err := c.Request.FormFile("file")
+		file, header, err := c.Request.FormFile("file")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to get file"})
 			return
@@ -135,13 +135,18 @@ func (fm *FileManager) uploadFile(signerServer *SignerServer) gin.HandlerFunc {
 
 		fm.mu.Lock()
 		fm.files[fileID] = fileInfo
+		fileInfo.Status = "signing"
 		fm.mu.Unlock()
 
 		downloadURL := fmt.Sprintf("http://%s/unsigned/%s", c.Request.Host, fileID)
 		uploadURL := fmt.Sprintf("http://%s/api/v1/upload-signed/%s", c.Request.Host, fileID)
 
-		fileInfo.Status = "signing"
-		signerServer.SendSignRequest("default", fileID, downloadURL, uploadURL)
+		fileName := header.Filename
+		if fileName == "" {
+			fileName = fileID
+		}
+
+		signerServer.SendSignRequest("default", fileID, fileName, downloadURL, uploadURL)
 
 		c.JSON(http.StatusOK, UploadResponse{FileID: fileID})
 	}

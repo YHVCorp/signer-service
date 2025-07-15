@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
+	"log"
 	"sync"
 
-	"github.com/YHVCorp/signer-service/server/proto"
+	"github.com/YHVCorp/signer-service/proto"
 	"google.golang.org/grpc"
 )
 
@@ -19,11 +21,8 @@ func NewSignerServer() *SignerServer {
 	}
 }
 
-func (s *SignerServer) Subscribe(req *proto.SubscribeRequest, stream proto.SignerService_SubscribeServer) error {
-	clientID := req.ClientId
-	if clientID == "" {
-		clientID = "default"
-	}
+func (s *SignerServer) StreamSignRequests(req *proto.Empty, stream proto.SignerService_StreamSignRequestsServer) error {
+	clientID := "default"
 
 	clientChan := make(chan *proto.SignRequest, 100)
 
@@ -50,22 +49,33 @@ func (s *SignerServer) Subscribe(req *proto.SubscribeRequest, stream proto.Signe
 	}
 }
 
-func (s *SignerServer) SendSignRequest(clientID, fileID, downloadURL, uploadURL string) {
+func (s *SignerServer) SendSignRequest(clientID, requestID, fileName, downloadURL, uploadURL string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if clientChan, exists := s.clients[clientID]; exists {
 		signReq := &proto.SignRequest{
-			FileId:      fileID,
+			RequestId:   requestID,
+			FileName:    fileName,
 			DownloadUrl: downloadURL,
 			UploadUrl:   uploadURL,
 		}
 
 		select {
 		case clientChan <- signReq:
+			log.Printf("Sign request sent for file %s", fileName)
 		default:
+			log.Printf("Failed to send sign request for %s: channel full", fileName)
 		}
+	} else {
+		log.Printf("Client %s not found", clientID)
 	}
+}
+
+func (s *SignerServer) ReportSignResult(ctx context.Context, result *proto.SignResult) (*proto.Empty, error) {
+	log.Printf("Received sign result for request %s: success=%t, message=%s",
+		result.RequestId, result.Success, result.Message)
+	return &proto.Empty{}, nil
 }
 
 func (s *SignerServer) RegisterGRPC(grpcServer *grpc.Server) {
