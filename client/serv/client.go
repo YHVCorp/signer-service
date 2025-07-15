@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	pb "github.com/YHVCorp/signer-service/proto"
 	"github.com/YHVCorp/signer-service/client/utils"
+	pb "github.com/YHVCorp/signer-service/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -39,7 +39,7 @@ func NewSignerClient(serverAddress, token, certPath, key, container string) *Sig
 
 func (c *SignerClient) Start() error {
 	// Establish gRPC connection
-	conn, err := grpc.Dial(c.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %v", err)
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/kardianos/service"
 )
 
-// signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "<CERT>" /csp "eToken Base Cryptographic Provider" /k "[{{<KEY>}}]=<CONTAINER>" "<FILE_TO_SIGN>"
 type program struct{}
 
 func (p *program) Start(_ service.Service) error {

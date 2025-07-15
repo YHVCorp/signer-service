@@ -17,6 +17,9 @@ func ExecuteSignTool(certPath, key, container, filePath string) error {
 		return fmt.Errorf("signtool is only supported on Windows")
 	}
 
+	// Construct the command to execute signtool
+	// Example command:
+	// signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "<CERT>" /csp "eToken Base Cryptographic Provider" /k "[{{<KEY>}}]=<CONTAINER>" "<FILE_TO_SIGN>"
 	args := []string{
 		"sign",
 		"/fd", "SHA256",
