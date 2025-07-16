@@ -1,0 +1,64 @@
+name: Release Signer Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.20 
+        id: go
+
+      - name: Build and package server binaries
+        working-directory: ./server
+        run: |
+          echo "Building server binaries for multiple platforms..."
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o "signer-server-darwin-x64" .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o "signer-server-darwin-arm64" .
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o "signer-server-linux-arm64" .
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "signer-server-linux-x64" .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o "signer-server-win32-x64.exe" .
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o "signer-server-win32-arm64.exe" .
+
+      - name: Build and package client binaries
+        working-directory: ./client
+        run: |
+          echo "Building client binaries for multiple platforms..."
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o "signer-client-darwin-x64" .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o "signer-client-darwin-arm64" .
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o "signer-client-linux-arm64" .
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "signer-client-linux-x64" .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o "signer-client-win32-x64.exe" .
+          GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o "signer-client-win32-arm64.exe" .
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: ./CHANGELOG.md
+          draft: false
+          prerelease: false
+          files: |
+            ./server/signer-server-darwin-x64
+            ./server/signer-server-darwin-arm64
+            ./server/signer-server-linux-arm64
+            ./server/signer-server-linux-x64
+            ./server/signer-server-win32-x64.exe
+            ./server/signer-server-win32-arm64.exe
+            ./client/signer-client-darwin-x64
+            ./client/signer-client-darwin-arm64
+            ./client/signer-client-linux-arm64
+            ./client/signer-client-linux-x64
+            ./client/signer-client-win32-x64.exe
+            ./client/signer-client-win32-arm64.exe
