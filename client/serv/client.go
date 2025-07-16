@@ -6,8 +6,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/YHVCorp/signer-service/client/utils"
@@ -25,6 +27,10 @@ type SignerClient struct {
 	container     string
 	client        pb.SignerServiceClient
 	conn          *grpc.ClientConn
+
+	maxRetries int
+	retryDelay time.Duration
+	isRunning  bool
 }
 
 func NewSignerClient(serverAddress, token, certPath, key, container string) *SignerClient {
@@ -34,28 +40,77 @@ func NewSignerClient(serverAddress, token, certPath, key, container string) *Sig
 		certPath:      certPath,
 		key:           key,
 		container:     container,
+		maxRetries:    -1,
+		retryDelay:    1 * time.Second,
+		isRunning:     false,
 	}
 }
 
 func (c *SignerClient) Start() error {
-	// Establish gRPC connection
-	conn, err := grpc.NewClient(c.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %v", err)
-	}
-	c.conn = conn
-	c.client = pb.NewSignerServiceClient(conn)
-
-	log.Printf("Connected to signer server at %s", c.serverAddress)
-
-	// Start listening for sign requests
-	return c.listenForSignRequests()
+	c.isRunning = true
+	return c.connectWithRetry()
 }
 
 func (c *SignerClient) Stop() {
+	c.isRunning = false
 	if c.conn != nil {
 		c.conn.Close()
 	}
+}
+
+func (c *SignerClient) connectWithRetry() error {
+	retryCount := 0
+
+	for c.isRunning {
+		err := c.connect()
+		if err == nil {
+			err = c.listenForSignRequests()
+			if err != nil {
+				log.Printf("Listen error: %v", err)
+			}
+		}
+
+		if !c.isRunning {
+			break
+		}
+
+		retryCount++
+		log.Printf("Connection lost (attempt %d). Retrying in %v...", retryCount, c.retryDelay)
+
+		if c.maxRetries > 0 && retryCount >= c.maxRetries {
+			return utils.Logger.ErrorF("max retries (%d) reached", c.maxRetries)
+		}
+
+		time.Sleep(c.retryDelay)
+
+		if c.retryDelay < 30*time.Second {
+			c.retryDelay = time.Duration(float64(c.retryDelay) * 1.5)
+		}
+	}
+
+	return nil
+}
+
+func (c *SignerClient) connect() error {
+	if c.conn != nil {
+		c.conn.Close()
+	}
+
+	log.Printf("Connecting to gRPC server at %s", c.serverAddress)
+
+	conn, err := grpc.NewClient(c.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return utils.Logger.ErrorF("failed to connect to server: %v", err)
+	}
+
+	c.conn = conn
+	c.client = pb.NewSignerServiceClient(conn)
+
+	utils.Logger.Info("Successfully connected to gRPC server at %s", c.serverAddress)
+
+	c.retryDelay = 1 * time.Second
+
+	return nil
 }
 
 func (c *SignerClient) listenForSignRequests() error {
@@ -64,24 +119,23 @@ func (c *SignerClient) listenForSignRequests() error {
 
 	stream, err := c.client.StreamSignRequests(ctx, &pb.Empty{})
 	if err != nil {
-		return fmt.Errorf("failed to start stream: %v", err)
+		return utils.Logger.ErrorF("failed to start stream: %v", err)
 	}
 
-	log.Println("Listening for sign requests...")
+	utils.Logger.Info("Listening for sign requests...")
 
-	for {
+	for c.isRunning {
 		req, err := stream.Recv()
 		if err == io.EOF {
-			log.Println("Stream ended")
-			break
+			log.Println("Stream ended by server")
+			return utils.Logger.ErrorF("stream closed by server")
 		}
 		if err != nil {
 			log.Printf("Error receiving request: %v", err)
-			time.Sleep(5 * time.Second) // Wait before reconnecting
-			continue
+			return utils.Logger.ErrorF("stream error: %v", err)
 		}
 
-		log.Printf("Received sign request for file: %s", req.FileName)
+		utils.Logger.Info("Received sign request for file: %s", req.FileName)
 		go c.processSignRequest(req)
 	}
 
@@ -97,33 +151,37 @@ func (c *SignerClient) processSignRequest(req *pb.SignRequest) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	host := c.extractHostFromServerAddress()
+	downloadURL := fmt.Sprintf("http://%s:8081%s", host, req.DownloadUrl)
+	uploadURL := fmt.Sprintf("http://%s:8081%s", host, req.UploadUrl)
+
 	// Download file
 	filePath := filepath.Join(tempDir, req.FileName)
-	if err := c.downloadFile(req.DownloadUrl, filePath); err != nil {
-		log.Printf("Failed to download file: %v", err)
+	if err := c.downloadFile(downloadURL, filePath); err != nil {
+		utils.Logger.ErrorF("Failed to download file: %v", err)
 		c.reportError(req.RequestId, fmt.Sprintf("Download failed: %v", err))
 		return
 	}
 
-	log.Printf("Downloaded file: %s", filePath)
+	utils.Logger.Info("Downloaded file: %s", filePath)
 
 	// Sign file
 	if err := c.signFile(filePath); err != nil {
-		log.Printf("Failed to sign file: %v", err)
+		utils.Logger.ErrorF("Failed to sign file: %v", err)
 		c.reportError(req.RequestId, fmt.Sprintf("Signing failed: %v", err))
 		return
 	}
 
-	log.Printf("Successfully signed file: %s", filePath)
+	utils.Logger.Info("Successfully signed file: %s", filePath)
 
 	// Upload signed file
-	if err := c.uploadFile(req.UploadUrl, filePath); err != nil {
-		log.Printf("Failed to upload file: %v", err)
+	if err := c.uploadFile(uploadURL, filePath); err != nil {
+		utils.Logger.ErrorF("Failed to upload file: %v", err)
 		c.reportError(req.RequestId, fmt.Sprintf("Upload failed: %v", err))
 		return
 	}
 
-	log.Printf("Successfully uploaded signed file: %s", filePath)
+	utils.Logger.Info("Successfully uploaded signed file: %s", filePath)
 
 	// Report success
 	c.reportSuccess(req.RequestId)
@@ -173,7 +231,7 @@ func (c *SignerClient) uploadFile(url, filePath string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("upload failed with status: %s", resp.Status)
+		return utils.Logger.ErrorF("upload failed with status: %s", resp.Status)
 	}
 
 	return nil
@@ -194,12 +252,18 @@ func (c *SignerClient) reportSuccess(requestID string) {
 	})
 
 	if err != nil {
-		log.Printf("Failed to report success: %v", err)
+		utils.Logger.ErrorF("Failed to report success: %v", err)
 	}
 }
 
 func (c *SignerClient) reportError(requestID, errorMsg string) {
-	ctx := context.Background()
+	if !c.isRunning {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.token)
 
 	_, err := c.client.ReportSignResult(ctx, &pb.SignResult{
@@ -209,6 +273,29 @@ func (c *SignerClient) reportError(requestID, errorMsg string) {
 	})
 
 	if err != nil {
-		log.Printf("Failed to report error: %v", err)
+		utils.Logger.ErrorF("Failed to report error: %v", err)
+	} else {
+		utils.Logger.Info("Successfully reported error for request %s: %s", requestID, errorMsg)
 	}
+}
+
+func (c *SignerClient) extractHostFromServerAddress() string {
+	serverAddr := c.serverAddress
+
+	if strings.HasPrefix(serverAddr, "http://") || strings.HasPrefix(serverAddr, "https://") {
+		if parsedURL, err := url.Parse(serverAddr); err == nil {
+			if strings.Contains(parsedURL.Host, ":") {
+				return strings.Split(parsedURL.Host, ":")[0]
+			}
+			return parsedURL.Host
+		}
+		serverAddr = strings.TrimPrefix(serverAddr, "http://")
+		serverAddr = strings.TrimPrefix(serverAddr, "https://")
+	}
+
+	if strings.Contains(serverAddr, ":") {
+		return strings.Split(serverAddr, ":")[0]
+	}
+
+	return serverAddr
 }

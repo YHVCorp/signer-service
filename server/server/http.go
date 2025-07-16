@@ -138,15 +138,15 @@ func (fm *FileManager) uploadFile(signerServer *SignerServer) gin.HandlerFunc {
 		fileInfo.Status = "signing"
 		fm.mu.Unlock()
 
-		downloadURL := fmt.Sprintf("http://%s/unsigned/%s", c.Request.Host, fileID)
-		uploadURL := fmt.Sprintf("http://%s/api/v1/upload-signed/%s", c.Request.Host, fileID)
+		downloadEndpoint := fmt.Sprintf("/unsigned/%s", fileID)
+		uploadEndpoint := fmt.Sprintf("/api/v1/upload-signed/%s", fileID)
 
 		fileName := header.Filename
 		if fileName == "" {
 			fileName = fileID
 		}
 
-		signerServer.SendSignRequest("default", fileID, fileName, downloadURL, uploadURL)
+		signerServer.SendSignRequest("default", fileID, fileName, downloadEndpoint, uploadEndpoint)
 
 		c.JSON(http.StatusOK, UploadResponse{FileID: fileID})
 	}

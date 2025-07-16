@@ -22,8 +22,6 @@ func (p *program) Stop(_ service.Service) error {
 }
 
 func (p *program) run() {
-	utils.InitLogger(config.ServiceLogFile)
-
 	if !config.ConfigExists() {
 		utils.Logger.Fatal("Configuration not found. Please create one using the -install flag.")
 	}

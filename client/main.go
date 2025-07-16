@@ -8,9 +8,12 @@ import (
 
 	"github.com/YHVCorp/signer-service/client/config"
 	"github.com/YHVCorp/signer-service/client/serv"
+	"github.com/YHVCorp/signer-service/client/utils"
 )
 
 func main() {
+	utils.InitLogger(config.ServiceLogFile)
+
 	var (
 		install      = flag.Bool("install", false, "Install the signer client service")
 		uninstall    = flag.Bool("uninstall", false, "Uninstall the signer client service")

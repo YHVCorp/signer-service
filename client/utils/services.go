@@ -32,7 +32,12 @@ func StopService(name string) error {
 			return fmt.Errorf("error stoping service: %v", err)
 		}
 	case "linux":
-		_, err := Execute("systemctl", path, "stop", name)
+		_, err := Execute("systemctl", path, "is-active", name)
+		if err != nil {
+			return nil
+		}
+
+		_, err = Execute("systemctl", path, "stop", name)
 		if err != nil {
 			return fmt.Errorf("error stoping service: %v", err)
 		}
@@ -58,7 +63,7 @@ func UninstallService(name string) error {
 		if err != nil {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}
-		_, err = Execute("rm", "/etc/systemd/system/", "/etc/systemd/system/"+name+".service")
+		_, err = Execute("rm", "/etc/systemd/system/", "-f", "/etc/systemd/system/"+name+".service")
 		if err != nil {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}
