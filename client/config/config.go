@@ -247,7 +247,7 @@ func ConfigExists() bool {
 func CreateInitialConfig() error {
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Enter server address (e.g., localhost:50051): ")
+	fmt.Print("Enter server address (e.g., https://<ip-or-domain>): ")
 	serverAddress, _ := reader.ReadString('\n')
 	serverAddress = strings.TrimSpace(serverAddress)
 

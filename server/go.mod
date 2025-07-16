@@ -9,9 +9,10 @@ require (
 	github.com/kardianos/service v1.2.2
 	github.com/threatwinds/logger v1.2.2
 	google.golang.org/grpc v1.73.0
-	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+require google.golang.org/protobuf v1.36.6 // indirect
 
 require (
 	github.com/YHVCorp/signer-service/proto v0.0.0-20250715154513-3d7c6a992c9b

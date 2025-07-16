@@ -8,7 +8,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,9 +97,12 @@ func (c *SignerClient) connect() error {
 		c.conn.Close()
 	}
 
-	log.Printf("Connecting to gRPC server at %s", c.serverAddress)
+	server := strings.TrimPrefix(c.serverAddress, "https://")
+	server = strings.TrimPrefix(server, "http://")
 
-	conn, err := grpc.NewClient(c.serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	log.Printf("Connecting to gRPC server at %s:50052", server)
+
+	conn, err := grpc.Dial(fmt.Sprintf("%s:50052", server), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return utils.Logger.ErrorF("failed to connect to server: %v", err)
 	}
@@ -108,7 +110,7 @@ func (c *SignerClient) connect() error {
 	c.conn = conn
 	c.client = pb.NewSignerServiceClient(conn)
 
-	utils.Logger.Info("Successfully connected to gRPC server at %s", c.serverAddress)
+	utils.Logger.Info("Successfully connected to gRPC server at %s:50052", server)
 
 	c.retryDelay = 1 * time.Second
 
@@ -153,9 +155,8 @@ func (c *SignerClient) processSignRequest(req *pb.SignRequest) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	host := c.extractHostFromServerAddress()
-	downloadURL := fmt.Sprintf("http://%s:8081%s", host, req.DownloadUrl)
-	uploadURL := fmt.Sprintf("http://%s:8081%s", host, req.UploadUrl)
+	downloadURL := fmt.Sprintf("%s:8081%s", c.serverAddress, req.DownloadUrl)
+	uploadURL := fmt.Sprintf("%s:8081%s", c.serverAddress, req.UploadUrl)
 
 	// Download file
 	filePath := filepath.Join(tempDir, req.FileName)
@@ -296,25 +297,4 @@ func (c *SignerClient) reportError(requestID, errorMsg string) {
 	} else {
 		utils.Logger.Info("Successfully reported error for request %s: %s", requestID, errorMsg)
 	}
-}
-
-func (c *SignerClient) extractHostFromServerAddress() string {
-	serverAddr := c.serverAddress
-
-	if strings.HasPrefix(serverAddr, "http://") || strings.HasPrefix(serverAddr, "https://") {
-		if parsedURL, err := url.Parse(serverAddr); err == nil {
-			if strings.Contains(parsedURL.Host, ":") {
-				return strings.Split(parsedURL.Host, ":")[0]
-			}
-			return parsedURL.Host
-		}
-		serverAddr = strings.TrimPrefix(serverAddr, "http://")
-		serverAddr = strings.TrimPrefix(serverAddr, "https://")
-	}
-
-	if strings.Contains(serverAddr, ":") {
-		return strings.Split(serverAddr, ":")[0]
-	}
-
-	return serverAddr
 }

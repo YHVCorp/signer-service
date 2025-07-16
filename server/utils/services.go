@@ -63,9 +63,18 @@ func UninstallService(name string) error {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}
 	case "darwin":
-		Execute("launchctl", path, "remove", name)
-		Execute("rm", "/Library/LaunchDaemons/"+name+".plist")
-		Execute("rm", "/Users/"+os.Getenv("USER")+"/Library/LaunchAgents/"+name+".plist")
+		err := Execute("launchctl", path, "remove", name)
+		if err != nil {
+			return fmt.Errorf("error uninstalling service: %v", err)
+		}
+		err = Execute("rm", "/Library/LaunchDaemons/"+name+".plist")
+		if err != nil {
+			return fmt.Errorf("error uninstalling service: %v", err)
+		}
+		err = Execute("rm", "/Users/"+os.Getenv("USER")+"/Library/LaunchAgents/"+name+".plist")
+		if err != nil {
+			return fmt.Errorf("error uninstalling service: %v", err)
+		}
 
 	}
 	return nil

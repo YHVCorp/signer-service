@@ -34,8 +34,7 @@ type UploadResponse struct {
 }
 
 type StatusResponse struct {
-	Status    string `json:"status"`
-	SignedURL string `json:"signed_url,omitempty"`
+	Status string `json:"status"`
 }
 
 func NewFileManager() *FileManager {
@@ -166,10 +165,6 @@ func (fm *FileManager) getFileStatus(c *gin.Context) {
 
 	response := StatusResponse{
 		Status: fileInfo.Status,
-	}
-
-	if fileInfo.Status == "ready" && fileInfo.SignedURL != "" {
-		response.SignedURL = fmt.Sprintf("http://%s/api/v1/download/%s", c.Request.Host, fileID)
 	}
 
 	c.JSON(http.StatusOK, response)

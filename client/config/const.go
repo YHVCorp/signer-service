@@ -7,5 +7,5 @@ import (
 )
 
 var (
-	ServiceLogFile = filepath.Join(utils.GetMyPath(), "logs", "utmstack_agent.log")
+	ServiceLogFile = filepath.Join(utils.GetMyPath(), "logs", "signer_agent.log")
 )
