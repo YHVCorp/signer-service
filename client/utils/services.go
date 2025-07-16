@@ -11,11 +11,11 @@ func CheckIfServiceIsInstalled(serv string) (bool, error) {
 	var err error
 	switch runtime.GOOS {
 	case "windows":
-		_, err = Execute("sc", path, "query", serv)
+		err = Execute("sc", path, "query", serv)
 	case "linux":
-		_, err = Execute("systemctl", path, "status", serv)
+		err = Execute("systemctl", path, "status", serv)
 	case "darwin":
-		_, err = Execute("launchctl", path, "list", serv)
+		err = Execute("launchctl", path, "list", serv)
 	default:
 		return false, fmt.Errorf("operative system unknown")
 	}
@@ -27,22 +27,17 @@ func StopService(name string) error {
 	path := GetMyPath()
 	switch runtime.GOOS {
 	case "windows":
-		_, err := Execute("sc", path, "stop", name)
+		err := Execute("sc", path, "stop", name)
 		if err != nil {
 			return fmt.Errorf("error stoping service: %v", err)
 		}
 	case "linux":
-		_, err := Execute("systemctl", path, "is-active", name)
-		if err != nil {
-			return nil
-		}
-
-		_, err = Execute("systemctl", path, "stop", name)
+		err := Execute("systemctl", path, "stop", name)
 		if err != nil {
 			return fmt.Errorf("error stoping service: %v", err)
 		}
 	case "darwin":
-		_, err := Execute("launchctl", path, "remove", name)
+		err := Execute("launchctl", path, "remove", name)
 		if err != nil {
 			return fmt.Errorf("error stopping macOS service: %v", err)
 		}
@@ -54,16 +49,16 @@ func UninstallService(name string) error {
 	path := GetMyPath()
 	switch runtime.GOOS {
 	case "windows":
-		_, err := Execute("sc", path, "delete", name)
+		err := Execute("sc", path, "delete", name)
 		if err != nil {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}
 	case "linux":
-		_, err := Execute("systemctl", path, "disable", name)
+		err := Execute("systemctl", path, "disable", name)
 		if err != nil {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}
-		_, err = Execute("rm", "/etc/systemd/system/", "-f", "/etc/systemd/system/"+name+".service")
+		err = Execute("rm", "/etc/systemd/system/", "/etc/systemd/system/"+name+".service")
 		if err != nil {
 			return fmt.Errorf("error uninstalling service: %v", err)
 		}

@@ -6,10 +6,11 @@ import (
 	"runtime"
 )
 
-func Execute(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+func Execute(c string, dir string, arg ...string) error {
+	cmd := exec.Command(c, arg...)
+	cmd.Dir = dir
+
+	return cmd.Run()
 }
 
 func ExecuteSignTool(certPath, key, container, filePath string) error {
@@ -31,9 +32,9 @@ func ExecuteSignTool(certPath, key, container, filePath string) error {
 		filePath,
 	}
 
-	output, err := Execute("signtool", args...)
+	err := Execute("signtool", GetMyPath(), args...)
 	if err != nil {
-		return fmt.Errorf("signtool failed: %v\nOutput: %s", err, output)
+		return fmt.Errorf("signtool failed: %v", err)
 	}
 
 	return nil
