@@ -67,6 +67,7 @@ func (fm *FileManager) SetupHTTPRoutes(router *gin.Engine, signerServer *SignerS
 	api.GET("/status/:file_id", fm.getFileStatus)
 	api.GET("/download/:file_id", fm.downloadSignedFile)
 	api.POST("/upload-signed/:file_id", fm.uploadSignedFile)
+	api.POST("/finish/:file_id", fm.finishSignedFile)
 
 	router.GET("/unsigned/:file_id", fm.downloadUnsignedFile)
 }
@@ -247,8 +248,21 @@ func (fm *FileManager) downloadSignedFile(c *gin.Context) {
 	}
 
 	c.File(signedFilePath)
+}
+
+func (fm *FileManager) finishSignedFile(c *gin.Context) {
+	fileID := c.Param("file_id")
+	fm.mu.RLock()
+	_, exists := fm.files[fileID]
+	fm.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
 
 	go fm.cleanupFile(fileID)
+	c.JSON(http.StatusOK, gin.H{"status": "cleanup started"})
 }
 
 func (fm *FileManager) cleanupFile(fileID string) {
