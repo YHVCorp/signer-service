@@ -1,10 +1,12 @@
 package serv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -215,15 +217,32 @@ func (c *SignerClient) uploadFile(url, filePath string) error {
 	}
 	defer file.Close()
 
-	req, err := http.NewRequest("PUT", url, file)
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Content-Type", "application/octet-stream")
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return err
+	}
+
+	writer.Close()
+
+	req, err := http.NewRequest("POST", url, &requestBody)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
