@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -29,4 +30,12 @@ func ReadYAML(path string, result interface{}) error {
 	}
 
 	return nil
+}
+
+func IsSubPath(path string, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }

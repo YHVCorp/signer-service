@@ -20,6 +20,7 @@ type FileManager struct {
 	mu          sync.RWMutex
 	uploadDir   string
 	downloadDir string
+	sharedDir   string
 }
 
 type FileInfo struct {
@@ -43,11 +44,15 @@ func NewFileManager() *FileManager {
 		files:       make(map[string]*FileInfo),
 		uploadDir:   filepath.Join(basePath, "uploads"),
 		downloadDir: filepath.Join(basePath, "downloads"),
+		sharedDir:   filepath.Join(basePath, "shared"),
 	}
 }
 
 func (fm *FileManager) Setup() error {
 	if err := os.MkdirAll(fm.uploadDir, 0755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(fm.sharedDir, 0755); err != nil {
 		return err
 	}
 	return os.MkdirAll(fm.downloadDir, 0755)
@@ -68,7 +73,7 @@ func (fm *FileManager) SetupHTTPRoutes(router *gin.Engine, signerServer *SignerS
 	api.GET("/download/:file_id", fm.downloadSignedFile)
 	api.POST("/upload-signed/:file_id", fm.uploadSignedFile)
 	api.POST("/finish/:file_id", fm.finishSignedFile)
-
+	api.GET("/fs/*filepath", fm.serveSharedFile)
 	router.GET("/unsigned/:file_id", fm.downloadUnsignedFile)
 }
 
@@ -263,6 +268,49 @@ func (fm *FileManager) finishSignedFile(c *gin.Context) {
 
 	go fm.cleanupFile(fileID)
 	c.JSON(http.StatusOK, gin.H{"status": "cleanup started"})
+}
+
+func (fm *FileManager) serveSharedFile(c *gin.Context) {
+	relativePath := c.Param("filepath")
+	if relativePath == "" || relativePath == "/" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file path"})
+		return
+	}
+
+	safePath := filepath.Clean(relativePath)
+	fullPath := filepath.Join(fm.sharedDir, safePath)
+
+	if !utils.IsSubPath(fullPath, fm.sharedDir) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	if info.IsDir() {
+		files, err := os.ReadDir(fullPath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list directory"})
+			return
+		}
+
+		var names []string
+		for _, file := range files {
+			names = append(names, file.Name())
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"directory": safePath,
+			"files":     names,
+		})
+		return
+	}
+
+	c.File(fullPath)
 }
 
 func (fm *FileManager) cleanupFile(fileID string) {
