@@ -242,7 +242,7 @@ func (c *SignerClient) uploadFile(url, filePath string) error {
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
 	client := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: 5 * time.Minute,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
